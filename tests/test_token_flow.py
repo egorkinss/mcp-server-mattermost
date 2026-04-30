@@ -148,3 +148,4 @@ class TestOAuthProxyDiscovery:
         assert authorization_metadata["authorization_endpoint"] == "http://localhost:8000/authorize"
         assert authorization_metadata["registration_endpoint"] == "http://localhost:8000/register"
         assert authorization_metadata["token_endpoint"] == "http://localhost:8000/token"
+        assert authorization_metadata.get("client_id_metadata_document_supported") is not True

@@ -42,6 +42,7 @@ def build_mattermost_oauth_proxy(settings: Settings) -> OAuthProxy:
             jwt_signing_key=settings.oauth_jwt_signing_key,
             require_authorization_consent=settings.oauth_require_consent,
             fallback_access_token_expiry_seconds=settings.oauth_fallback_access_token_expiry_seconds,
+            enable_cimd=False,
         )
 
     return OAuthProxy(
@@ -58,4 +59,5 @@ def build_mattermost_oauth_proxy(settings: Settings) -> OAuthProxy:
         jwt_signing_key=settings.oauth_jwt_signing_key,
         require_authorization_consent=settings.oauth_require_consent,
         fallback_access_token_expiry_seconds=settings.oauth_fallback_access_token_expiry_seconds,
+        enable_cimd=False,
     )
