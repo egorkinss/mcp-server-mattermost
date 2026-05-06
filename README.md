@@ -173,16 +173,10 @@ Once configured, you can ask your AI assistant:
 | `MATTERMOST_LOG_LEVEL` | No | INFO | Logging level |
 | `MATTERMOST_LOG_FORMAT` | No | json | Log output format: `json` or `text` |
 | `MATTERMOST_API_VERSION` | No | v4 | Mattermost API version |
-| `MATTERMOST_ALLOW_HTTP_CLIENT_TOKENS` | No | false | Deprecated alias for `MATTERMOST_AUTH_MODE=client_token` |
-| `MATTERMOST_OAUTH_CLIENT_ID` | Conditional | — | Mattermost OAuth App ID for `oauth_proxy`. |
-| `MATTERMOST_OAUTH_CLIENT_TYPE` | Conditional | `confidential` | `public` or `confidential` for `oauth_proxy`. |
-| `MATTERMOST_OAUTH_CLIENT_SECRET` | Conditional | — | Required for confidential OAuth Apps. |
-| `MATTERMOST_OAUTH_MCP_PUBLIC_URL` | Conditional | — | Public base URL of this MCP server. Required for `oauth_proxy`. |
-| `MATTERMOST_OAUTH_MATTERMOST_PUBLIC_URL` | No | `MATTERMOST_URL` | Browser-facing Mattermost URL for OAuth redirects. |
-| `MATTERMOST_OAUTH_CALLBACK_PATH` | No | `/oauth/callback/mm` | Callback path registered in the Mattermost OAuth App. |
-| `MATTERMOST_OAUTH_JWT_SIGNING_KEY` | Conditional | — | Required for public OAuth Apps; optional for confidential. |
-| `MATTERMOST_OAUTH_REQUIRE_CONSENT` | No | true | Show the FastMCP consent screen before redirecting to Mattermost. |
-| `MATTERMOST_OAUTH_FALLBACK_ACCESS_TOKEN_EXPIRY_SECONDS` | No | — | Fallback token TTL. |
+
+For `client_token` and `oauth_proxy` modes — including Mattermost OAuth App
+registration, all `MATTERMOST_OAUTH_*` settings, and MCP client connection — see
+[Authentication](docs/authentication.md).
 
 ## Docker
 
