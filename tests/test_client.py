@@ -870,6 +870,143 @@ class TestMattermostClientChannelsAPI:
 
     @pytest.mark.asyncio
     @respx.mock
+    async def test_get_my_channels_with_unreads(self, mock_settings):
+        """get_my_channels_with_unreads() merges channels with membership unread counts."""
+        from mcp_server_mattermost.config import get_settings
+
+        settings = get_settings()
+        client = MattermostClient(settings)
+
+        channels_route = respx.get("https://test.mattermost.com/api/v4/users/me/teams/team123/channels").mock(
+            return_value=httpx.Response(
+                200,
+                json=[
+                    {"id": "ch1", "name": "active", "type": "O", "total_msg_count": 100, "total_msg_count_root": 40},
+                    {"id": "ch2", "name": "read", "type": "O", "total_msg_count": 50, "total_msg_count_root": 20},
+                    {"id": "ch3", "name": "orphan", "type": "O", "total_msg_count": 30, "total_msg_count_root": 12},
+                ],
+            ),
+        )
+        members_route = respx.get("https://test.mattermost.com/api/v4/users/me/teams/team123/channels/members").mock(
+            return_value=httpx.Response(
+                200,
+                json=[
+                    {
+                        "channel_id": "ch1",
+                        "msg_count": 95,
+                        "mention_count": 3,
+                        "msg_count_root": 38,
+                        "mention_count_root": 1,
+                        "last_viewed_at": 1716620000000,
+                    },
+                    {
+                        "channel_id": "ch2",
+                        "msg_count": 50,
+                        "mention_count": 0,
+                        "msg_count_root": 20,
+                        "mention_count_root": 0,
+                        "last_viewed_at": 1716700000000,
+                    },
+                ],
+            ),
+        )
+
+        async with client.lifespan():
+            result = await client.get_my_channels_with_unreads("team123")
+
+        assert channels_route.called
+        assert members_route.called
+        by_id = {ch["id"]: ch for ch in result}
+        # ch1: non-root 100-95=5, root 40-38=2 — distinct numbers prove the pairs compute independently
+        assert by_id["ch1"]["unread_msg_count"] == 5
+        assert by_id["ch1"]["mention_count"] == 3
+        assert by_id["ch1"]["unread_msg_count_root"] == 2
+        assert by_id["ch1"]["mention_count_root"] == 1
+        assert by_id["ch1"]["last_viewed_at"] == 1716620000000
+        # ch2: fully read on both lenses
+        assert by_id["ch2"]["unread_msg_count"] == 0
+        assert by_id["ch2"]["mention_count"] == 0
+        assert by_id["ch2"]["unread_msg_count_root"] == 0
+        assert by_id["ch2"]["mention_count_root"] == 0
+        assert by_id["ch2"]["last_viewed_at"] == 1716700000000
+        # ch3 has no membership record → all four counters and last_viewed_at default to 0
+        assert by_id["ch3"]["unread_msg_count"] == 0
+        assert by_id["ch3"]["mention_count"] == 0
+        assert by_id["ch3"]["unread_msg_count_root"] == 0
+        assert by_id["ch3"]["mention_count_root"] == 0
+        assert by_id["ch3"]["last_viewed_at"] == 0
+
+    @pytest.mark.asyncio
+    @respx.mock
+    async def test_get_my_channels_with_unreads_clamps_negative(self, mock_settings):
+        """get_my_channels_with_unreads() clamps unread to 0 when seen count exceeds total."""
+        from mcp_server_mattermost.config import get_settings
+
+        settings = get_settings()
+        client = MattermostClient(settings)
+
+        respx.get("https://test.mattermost.com/api/v4/users/me/teams/team123/channels").mock(
+            return_value=httpx.Response(
+                200,
+                json=[{"id": "ch1", "name": "skewed", "type": "O", "total_msg_count": 10, "total_msg_count_root": 4}],
+            ),
+        )
+        respx.get("https://test.mattermost.com/api/v4/users/me/teams/team123/channels/members").mock(
+            return_value=httpx.Response(
+                200,
+                json=[
+                    {
+                        "channel_id": "ch1",
+                        "msg_count": 15,
+                        "mention_count": 0,
+                        "msg_count_root": 9,
+                        "mention_count_root": 0,
+                    }
+                ],
+            ),
+        )
+
+        async with client.lifespan():
+            result = await client.get_my_channels_with_unreads("team123")
+
+        assert result[0]["unread_msg_count"] == 0
+        assert result[0]["mention_count"] == 0
+        assert result[0]["unread_msg_count_root"] == 0
+        assert result[0]["mention_count_root"] == 0
+
+    @pytest.mark.asyncio
+    @respx.mock
+    async def test_get_my_channels_with_unreads_handles_non_list_members(self, mock_settings):
+        """get_my_channels_with_unreads() defaults all counters to 0 when memberships are not a list."""
+        from mcp_server_mattermost.config import get_settings
+
+        settings = get_settings()
+        client = MattermostClient(settings)
+
+        respx.get("https://test.mattermost.com/api/v4/users/me/teams/team123/channels").mock(
+            return_value=httpx.Response(
+                200,
+                json=[
+                    {"id": "ch1", "name": "active", "type": "O", "total_msg_count": 100, "total_msg_count_root": 40},
+                    {"id": "ch2", "name": "read", "type": "O", "total_msg_count": 50, "total_msg_count_root": 20},
+                ],
+            ),
+        )
+        respx.get("https://test.mattermost.com/api/v4/users/me/teams/team123/channels/members").mock(
+            return_value=httpx.Response(200, json={}),
+        )
+
+        async with client.lifespan():
+            result = await client.get_my_channels_with_unreads("team123")
+
+        for channel in result:
+            assert channel["unread_msg_count"] == 0
+            assert channel["mention_count"] == 0
+            assert channel["unread_msg_count_root"] == 0
+            assert channel["mention_count_root"] == 0
+
+    @pytest.mark.asyncio
+    @respx.mock
     async def test_get_channel(self, mock_settings):
         """get_channel() should return channel by ID."""
         from mcp_server_mattermost.config import get_settings
@@ -1014,6 +1151,31 @@ class TestMattermostClientChannelsAPI:
 
         assert result == {"channel_id": "ch123", "user_id": "user456"}
 
+    @pytest.mark.asyncio
+    @respx.mock
+    async def test_view_channel_marks_channel_viewed(self, mock_settings):
+        """view_channel POSTs /channels/members/me/view with {"channel_id": ...}."""
+        import json
+
+        from mcp_server_mattermost.config import get_settings
+
+        settings = get_settings()
+        client = MattermostClient(settings)
+
+        route = respx.post(
+            "https://test.mattermost.com/api/v4/channels/members/me/view",
+        ).mock(
+            return_value=httpx.Response(
+                200,
+                json={"status": "OK", "last_viewed_at_times": {"ch1": 1716620000000}},
+            )
+        )
+        async with client.lifespan():
+            await client.view_channel(channel_id="ch1")
+        assert route.called
+        body = json.loads(route.calls[0].request.content)
+        assert body == {"channel_id": "ch1"}
+
 
 class TestMattermostClientMessagesAPI:
     """Test Messages/Posts API methods."""
@@ -1039,6 +1201,82 @@ class TestMattermostClientMessagesAPI:
 
         assert "posts" in result
         assert "post1" in result["posts"]
+
+    @pytest.mark.asyncio
+    @respx.mock
+    async def test_get_posts_since_passes_since_param(self, mock_settings):
+        """get_posts_since must call /channels/{id}/posts with the since query param."""
+        from mcp_server_mattermost.config import get_settings
+
+        settings = get_settings()
+        client = MattermostClient(settings)
+
+        route = respx.get("https://test.mattermost.com/api/v4/channels/ch1/posts").mock(
+            return_value=httpx.Response(200, json={"order": [], "posts": {}})
+        )
+        async with client.lifespan():
+            await client.get_posts_since(channel_id="ch1", since=1716620000000)
+        assert route.called
+        assert route.calls[0].request.url.params["since"] == "1716620000000"
+        assert "page" not in route.calls[0].request.url.params
+        assert "per_page" not in route.calls[0].request.url.params
+
+    @pytest.mark.asyncio
+    @respx.mock
+    async def test_get_posts_since_with_collapsed_threads(self, mock_settings):
+        """collapsed_threads=True must propagate to query params."""
+        from mcp_server_mattermost.config import get_settings
+
+        settings = get_settings()
+        client = MattermostClient(settings)
+
+        route = respx.get("https://test.mattermost.com/api/v4/channels/ch1/posts").mock(
+            return_value=httpx.Response(200, json={"order": [], "posts": {}})
+        )
+        async with client.lifespan():
+            await client.get_posts_since(channel_id="ch1", since=1716620000000, collapsed_threads=True)
+        assert route.calls[0].request.url.params["collapsedThreads"] == "true"
+
+    @pytest.mark.asyncio
+    @respx.mock
+    async def test_get_channel_posts_unread_passes_limits(self, mock_settings):
+        """get_channel_posts_unread must call /users/me/channels/{id}/posts/unread with limits."""
+        from mcp_server_mattermost.config import get_settings
+
+        settings = get_settings()
+        client = MattermostClient(settings)
+        route = respx.get("https://test.mattermost.com/api/v4/users/me/channels/ch1/posts/unread").mock(
+            return_value=httpx.Response(200, json={"order": [], "posts": {}})
+        )
+        async with client.lifespan():
+            await client.get_channel_posts_unread(
+                channel_id="ch1",
+                limit_before=10,
+                limit_after=100,
+            )
+        assert route.called
+        assert route.calls[0].request.url.params["limit_before"] == "10"
+        assert route.calls[0].request.url.params["limit_after"] == "100"
+
+    @pytest.mark.asyncio
+    @respx.mock
+    async def test_get_channel_posts_unread_with_collapsed_threads(self, mock_settings):
+        """collapsed_threads=True must propagate as collapsedThreads query param."""
+        from mcp_server_mattermost.config import get_settings
+
+        settings = get_settings()
+        client = MattermostClient(settings)
+        route = respx.get("https://test.mattermost.com/api/v4/users/me/channels/ch1/posts/unread").mock(
+            return_value=httpx.Response(200, json={"order": [], "posts": {}})
+        )
+        async with client.lifespan():
+            await client.get_channel_posts_unread(
+                channel_id="ch1",
+                limit_before=0,
+                limit_after=60,
+                collapsed_threads=True,
+            )
+        assert route.calls[0].request.url.params["collapsedThreads"] == "true"
 
     @pytest.mark.asyncio
     @respx.mock

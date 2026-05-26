@@ -584,6 +584,74 @@ class TestChannelBookmarkModel:
         assert bookmark.emoji == "bookmark"
 
 
+class TestChannelWithUnreadsModel:
+    """Tests for the ChannelWithUnreads response model."""
+
+    def test_schema_advertises_all_unread_counters(self):
+        """All four unread counter fields appear in the tool output schema."""
+        from mcp_server_mattermost.models import ChannelWithUnreads
+
+        properties = ChannelWithUnreads.model_json_schema()["properties"]
+        assert "unread_msg_count" in properties
+        assert "mention_count" in properties
+        assert "unread_msg_count_root" in properties
+        assert "mention_count_root" in properties
+
+    def test_schema_includes_last_viewed_at(self):
+        """last_viewed_at is exposed so agents can use it as the read marker."""
+        from mcp_server_mattermost.models import ChannelWithUnreads
+
+        properties = ChannelWithUnreads.model_json_schema()["properties"]
+        assert "last_viewed_at" in properties
+
+    def test_last_viewed_at_round_trips(self):
+        """last_viewed_at flows through model_validate as a Unix ms integer."""
+        from mcp_server_mattermost.models import ChannelWithUnreads
+
+        channel = ChannelWithUnreads.model_validate(
+            {
+                "id": "ch1",
+                "create_at": 1,
+                "update_at": 1,
+                "delete_at": 0,
+                "team_id": "team1",
+                "type": "O",
+                "display_name": "general",
+                "name": "general",
+                "header": "",
+                "purpose": "",
+                "last_post_at": 1,
+                "total_msg_count": 100,
+                "creator_id": "u1",
+                "unread_msg_count": 5,
+                "mention_count": 1,
+                "unread_msg_count_root": 3,
+                "mention_count_root": 1,
+                "last_viewed_at": 1716620000000,
+            }
+        )
+        assert channel.last_viewed_at == 1716620000000
+
+
+class TestChannelMemberModel:
+    """Tests for the ChannelMember response model."""
+
+    def test_schema_advertises_both_counter_pairs(self):
+        """ChannelMember exposes both non-root and root counter pairs.
+
+        The root pair (msg_count_root / mention_count_root) is what feeds the
+        per-channel root-unread computation in get_my_channels_with_unreads; without it
+        the consumer would have to read raw dict keys and lose type safety.
+        """
+        from mcp_server_mattermost.models import ChannelMember
+
+        properties = ChannelMember.model_json_schema()["properties"]
+        assert "msg_count" in properties
+        assert "mention_count" in properties
+        assert "msg_count_root" in properties
+        assert "mention_count_root" in properties
+
+
 class TestModelsExports:
     """Tests for models package exports."""
 

@@ -465,6 +465,52 @@ class MattermostClient:
         result = await self.get(f"/users/me/teams/{team_id}/channels")
         return result if isinstance(result, list) else []
 
+    async def get_my_channels_with_unreads(self, team_id: str) -> list[dict[str, Any]]:
+        """Get the authenticated user's channels enriched with unread counters and read marker.
+
+        Fetches the user's channels and channel memberships concurrently, then
+        merges them — each channel dict gets four counters (`unread_msg_count`,
+        `mention_count`, `unread_msg_count_root`, `mention_count_root`) and the
+        `last_viewed_at` read marker.
+
+        The non-root counters count thread replies as channel messages
+        (`unread_msg_count = max(0, channel.total_msg_count - member.msg_count)`);
+        the `_root` counters count only top-level posts
+        (`unread_msg_count_root = max(0, channel.total_msg_count_root - member.msg_count_root)`).
+        Channels without a matching membership record default all four counters
+        and `last_viewed_at` to 0.
+
+        Args:
+            team_id: Team identifier
+
+        Returns:
+            List of channel objects, each with `unread_msg_count`, `mention_count`,
+            `unread_msg_count_root`, `mention_count_root`, and `last_viewed_at`
+        """
+        channels_result, members_result = await asyncio.gather(
+            self.get_my_channels(team_id=team_id),
+            self.get(f"/users/me/teams/{team_id}/channels/members"),
+        )
+        channels: list[dict[str, Any]] = channels_result if isinstance(channels_result, list) else []
+        member_lookup = {m["channel_id"]: m for m in members_result} if isinstance(members_result, list) else {}
+        for channel in channels:
+            member = member_lookup.get(channel.get("id"))
+            if member is None:
+                channel["unread_msg_count"] = 0
+                channel["mention_count"] = 0
+                channel["unread_msg_count_root"] = 0
+                channel["mention_count_root"] = 0
+                channel["last_viewed_at"] = 0
+            else:
+                channel["unread_msg_count"] = max(0, channel.get("total_msg_count", 0) - member.get("msg_count", 0))
+                channel["mention_count"] = member.get("mention_count", 0)
+                channel["unread_msg_count_root"] = max(
+                    0, channel.get("total_msg_count_root", 0) - member.get("msg_count_root", 0)
+                )
+                channel["mention_count_root"] = member.get("mention_count_root", 0)
+                channel["last_viewed_at"] = member.get("last_viewed_at", 0)
+        return channels
+
     async def get_channel(self, channel_id: str) -> dict[str, Any]:
         """Get channel by ID.
 
@@ -593,6 +639,23 @@ class MattermostClient:
         user_id = await self._get_current_user_id()
         await self.delete(f"/channels/{channel_id}/members/{user_id}")
 
+    async def view_channel(self, channel_id: str) -> None:
+        """Mark a channel as viewed for the authenticated user.
+
+        Calls ``POST /channels/members/me/view`` with ``{"channel_id": ...}`` in the
+        body. Mattermost resets the channel-member counters (``msg_count =
+        total_msg_count``, ``mention_count = 0``) and updates ``last_viewed_at`` to the
+        current server time.
+
+        Args:
+            channel_id: Channel to mark as viewed.
+        """
+        await self._request(
+            "POST",
+            "/channels/members/me/view",
+            json={"channel_id": channel_id},
+        )
+
     async def get_channel_members(
         self,
         channel_id: str,
@@ -656,6 +719,79 @@ class MattermostClient:
         result = await self.get(
             f"/channels/{channel_id}/posts",
             params={"page": page, "per_page": per_page},
+        )
+        return result if isinstance(result, dict) else {}
+
+    async def get_posts_since(
+        self,
+        channel_id: str,
+        since: int,
+        *,
+        collapsed_threads: bool = False,
+    ) -> dict[str, Any]:
+        """Get posts in a channel modified after a given timestamp.
+
+        Uses ``GET /channels/{id}/posts?since=<ms>``. Filters by
+        ``Posts.UpdateAt > since``, so edits of older posts and threads with new replies
+        are included. Context root posts for new replies are auto-included in ``posts``
+        but NOT in ``order`` (server-side behavior).
+
+        Per Mattermost spec, ``since`` is mutually exclusive with ``page``/``per_page``;
+        this method does not accept them. Posts are ordered by ``create_at`` and the
+        server caps the response at 1000 posts; when the cap is hit, the returned
+        posts are not guaranteed to be consecutive (gaps are possible). Check
+        ``len(result['order'])`` to detect truncation.
+
+        Args:
+            channel_id: Channel identifier.
+            since: Unix timestamp in milliseconds.
+            collapsed_threads: True if the user has CRT enabled — tells Mattermost to
+                return CRT-aware data (default False; team operates with CRT off).
+
+        Returns:
+            Dict with 'posts' (id->post) and 'order' (list of root post ids).
+        """
+        params: dict[str, Any] = {"since": since}
+        if collapsed_threads:
+            params["collapsedThreads"] = "true"
+        result = await self.get(f"/channels/{channel_id}/posts", params=params)
+        return result if isinstance(result, dict) else {}
+
+    async def get_channel_posts_unread(
+        self,
+        channel_id: str,
+        limit_before: int = 0,
+        limit_after: int = 60,
+        *,
+        collapsed_threads: bool = False,
+    ) -> dict[str, Any]:
+        """Get a window of unread posts around the authenticated user's read marker.
+
+        Uses ``GET /users/me/channels/{id}/posts/unread``. Returns a window around the
+        oldest unread post, sorted reverse-chronologically. Unlike ``?since=``, edits of
+        older read posts do not surface here — only what's actually unread plus optional
+        context posts before the read marker.
+
+        Args:
+            channel_id: Channel identifier.
+            limit_before: How many read posts to include as context before the first
+                unread (0..200, default 0).
+            limit_after: How many unread posts to return (0..200, default 60).
+            collapsed_threads: True if the user has CRT enabled (default False).
+
+        Returns:
+            Dict with 'posts' and 'order'. Response size is capped at
+            ``limit_before + limit_after``.
+        """
+        params: dict[str, Any] = {
+            "limit_before": limit_before,
+            "limit_after": limit_after,
+        }
+        if collapsed_threads:
+            params["collapsedThreads"] = "true"
+        result = await self.get(
+            f"/users/me/channels/{channel_id}/posts/unread",
+            params=params,
         )
         return result if isinstance(result, dict) else {}
 

@@ -8,12 +8,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `get_channel_messages` now supports two new mutually-exclusive modes:
+  - `unread_only=True` — fetches the user's unread window via Mattermost's
+    `/users/me/channels/{id}/posts/unread` endpoint, with `limit_before` /
+    `limit_after` bounds and a `collapsed_threads` flag for CRT-on users.
+  - `since=<unix_ms>` — fetches posts modified after a timestamp via `?since=`,
+    suitable for incremental sync.
+- `PostList` now exposes `truncated: bool` — `True` when the response hit Mattermost's
+  response cap (`1000` for `?since=`, `limit_before + limit_after` for `/posts/unread`,
+  `per_page` for default pagination).
+- `docs/examples.md` — restored "Morning Catch-Up" example, now end-to-end with the new
+  unread-window flow, and added a "Bot Monitor Loop" recipe with two patterns
+  (simple `unread_only` + `mark_channel_viewed`, and at-least-once `since` + watermark).
+- `list_my_channels` accepts an `only_unread` filter to return only channels
+  with unread messages.
+- `mark_channel_viewed(channel_id)` — new tool that marks a channel as viewed
+  for the authenticated user. Resets the channel-member unread counters and
+  advances `last_viewed_at`. Documented usage: explicit user intent or a
+  bot-monitoring loop that owns the read state.
 - New `MATTERMOST_AUTH_MODE` setting selects one of three authentication strategies per server process: `static_token` (default), `client_token`, or `oauth_proxy`.
 - `oauth_proxy` mode using FastMCP `OAuthProxy` with Mattermost OAuth 2.0 Applications. Supports both confidential and public client modes; PKCE forwarded upstream in both cases.
 - New OAuth-related settings: `MATTERMOST_OAUTH_CLIENT_ID`, `MATTERMOST_OAUTH_CLIENT_SECRET`, `MATTERMOST_OAUTH_CLIENT_TYPE`, `MATTERMOST_OAUTH_MCP_PUBLIC_URL`, `MATTERMOST_OAUTH_MATTERMOST_PUBLIC_URL`, `MATTERMOST_OAUTH_CALLBACK_PATH`, `MATTERMOST_OAUTH_JWT_SIGNING_KEY`, `MATTERMOST_OAUTH_REQUIRE_CONSENT`, `MATTERMOST_OAUTH_ALLOWED_REDIRECT_URIS`, `MATTERMOST_OAUTH_FALLBACK_ACCESS_TOKEN_EXPIRY_SECONDS`.
 - New `docs/authentication.md` page covering all three auth modes, Mattermost OAuth App registration, MCP client connection, troubleshooting, and the full env-var reference.
 
 ### Changed
+- `list_my_channels` now returns four unread counters for each channel:
+  `unread_msg_count` / `mention_count` use non-root semantics — replies in
+  threads are counted, matching the channel badge when Collapsed Reply Threads
+  is off; `unread_msg_count_root` / `mention_count_root` count only root posts,
+  matching the badge when Collapsed Reply Threads is on.
+- `get_channel_messages`: tightened `limit_after` validation to `1-200`
+  (Mattermost rejects `limit_after=0` with HTTP 400; the previous `ge=0` bound
+  surfaced an unclear server error).
+- Rewrote `get_channel_messages` and `mark_channel_viewed` docstrings to be
+  self-contained and compact: intent → mode mapping up front, footgun-only
+  notes (`last_viewed_at == 0` bootstrap quirk, `since`-mode tombstones,
+  `truncated` semantics), implementation detail moved to Field descriptions
+  to keep agent context budget small.
 - The Docker image now installs the package at build time. Container startup invokes the venv binary directly instead of going through `uv run`, eliminating a redundant `uv sync` on every start.
 - **Behavioral change:** in `client_token` mode (and the new `oauth_proxy` mode), requests without a validated bearer token now fail with `AuthenticationError` instead of silently falling back to `MATTERMOST_TOKEN`. If you previously relied on the bot-token fallback for unauthenticated requests, switch to `MATTERMOST_AUTH_MODE=static_token` and remove `MATTERMOST_ALLOW_HTTP_CLIENT_TOKENS`.
 - **Behavioral change:** setting both `MATTERMOST_ALLOW_HTTP_CLIENT_TOKENS=true` and `MATTERMOST_AUTH_MODE` to a non-`client_token` value now raises a configuration error at startup. Previously the legacy flag was silently ignored when both were set with conflicting values.

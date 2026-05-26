@@ -49,13 +49,16 @@ Array of channel objects with `id`, `name`, `display_name`, `type`, `purpose`.
 
 List channels you are a member of in a team.
 
-Returns your channels filtered by type.
-By default returns all types.
-Use channel_types to narrow results.
+Returns your channels with unread counters for the authenticated user.
+`unread_msg_count` / `mention_count` count thread replies too (the channel badge with Collapsed Reply Threads off).
+`unread_msg_count_root` / `mention_count_root` count only root posts (the badge with Collapsed Reply Threads on).
+Use `channel_types` to narrow results.
+Use `only_unread` to return only channels with unread messages.
+For discovering public channels you haven't joined yet, use list_public_channels.
 
 ### Example prompts
 
-- "What channels am I in?"
+- "What channels have unread messages?"
 - "Show my private channels"
 - "List all my channels in this team"
 
@@ -73,14 +76,24 @@ Use channel_types to narrow results.
 |------|------|----------|---------|-------------|
 | `team_id` | string | ✓ | — | Team ID (26-character alphanumeric) |
 | `channel_types` | array | — | null | Channel types to include: O (public), P (private), D (direct), G (group). Default null returns all types. |
+| `only_unread` | boolean | — | false | Return only channels with unread messages. |
 
 ### Returns
 
-Array of channel objects with `id`, `name`, `display_name`, `type`, `purpose`.
+Array of channel objects with `id`, `name`, `display_name`, `type`, `purpose`,
+`total_msg_count`, plus four unread counters for the authenticated user:
+
+- `unread_msg_count` / `mention_count` — non-root semantics: thread replies are
+  counted. Match the channel unread badge when Collapsed Reply Threads is off.
+- `unread_msg_count_root` / `mention_count_root` — root posts only, excluding
+  thread replies. Match the channel unread badge when Collapsed Reply Threads is on.
+
+Channels without a membership record report 0 for all four counters.
 
 ### Mattermost API
 
-[GET /api/v4/users/{user_id}/teams/{team_id}/channels](https://api.mattermost.com/#tag/channels/operation/GetChannelsForTeamForUser)
+- [GET /api/v4/users/{user_id}/teams/{team_id}/channels](https://api.mattermost.com/#tag/channels/operation/GetChannelsForTeamForUser)
+- [GET /api/v4/users/{user_id}/teams/{team_id}/channels/members](https://api.mattermost.com/#tag/channels/operation/GetChannelMembersForUser)
 
 ---
 
@@ -271,6 +284,57 @@ None
 ### Mattermost API
 
 [DELETE /api/v4/channels/{channel_id}/members/{user_id}](https://api.mattermost.com/#tag/channels/operation/RemoveUserFromChannel)
+
+---
+
+## mark_channel_viewed
+
+Mark a channel as viewed for the authenticated user.
+
+Resets the channel-member unread counters (msg_count = total_msg_count,
+mention_count = 0) and advances `last_viewed_at` to the current server time.
+
+**When to use:**
+
+- The user explicitly asks to mark a channel as read.
+- A bot-monitoring loop where the agent owns the read state for the authenticated
+  account, after processing posts fetched via `get_channel_messages(unread_only=true)`.
+
+**Do not call** automatically after fetching unread posts. The user may still rely on
+the Mattermost UI unread badge as a "still need to handle" reminder outside of the AI
+session.
+
+### Example prompts
+
+- "Mark the engineering channel as read"
+- "I've processed everything in #releases — clear the unread badge"
+
+### Annotations
+
+| Hint | Value |
+|------|-------|
+| `readOnlyHint` | false |
+| `destructiveHint` | false |
+| `idempotentHint` | false |
+| `capability` | write |
+
+Not idempotent: each call advances `last_viewed_at` to the current server time, and any
+posts arriving between two consecutive calls are silently marked as viewed by the
+second call.
+
+### Parameters
+
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| `channel_id` | string | ✓ | — | Channel ID (26-character alphanumeric) |
+
+### Returns
+
+None.
+
+### Mattermost API
+
+[POST /api/v4/channels/members/{user_id}/view](https://api.mattermost.com/#tag/channels/operation/ViewChannel)
 
 ---
 

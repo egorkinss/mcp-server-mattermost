@@ -477,3 +477,47 @@ class TestListMyChannels:
         channels = to_dict(result)
         assert len(channels) >= 1
         assert all(ch["type"] == "D" for ch in channels)
+
+    async def test_list_my_channels_includes_unread_counts(self, mcp_client, team):
+        """list_my_channels: returns the four unread counters, all non-negative ints."""
+        result = await mcp_client.call_tool(
+            "list_my_channels",
+            {"team_id": team["id"]},
+        )
+
+        channels = to_dict(result)
+        assert len(channels) >= 1
+        counter_fields = (
+            "unread_msg_count",
+            "mention_count",
+            "unread_msg_count_root",
+            "mention_count_root",
+        )
+        for ch in channels:
+            for field in counter_fields:
+                assert field in ch, f"Missing {field} in channel {ch.get('name')}"
+                assert isinstance(ch[field], int)
+                assert ch[field] >= 0
+
+    async def test_list_my_channels_only_unread(self, mcp_client, team):
+        """list_my_channels: only_unread=True returns exactly the channels with unreads."""
+        all_result = await mcp_client.call_tool(
+            "list_my_channels",
+            {"team_id": team["id"]},
+        )
+        unread_result = await mcp_client.call_tool(
+            "list_my_channels",
+            {"team_id": team["id"], "only_unread": True},
+        )
+
+        all_channels = to_dict(all_result)
+        unread_channels = to_dict(unread_result)
+
+        for ch in unread_channels:
+            assert ch["unread_msg_count"] > 0, f"Channel {ch.get('name')} has 0 unreads but was returned"
+
+        # The filtered result must equal the manually computed unread subset —
+        # this verifies the filter actually filters even when the subset is empty.
+        expected_ids = {ch["id"] for ch in all_channels if ch["unread_msg_count"] > 0}
+        actual_ids = {ch["id"] for ch in unread_channels}
+        assert actual_ids == expected_ids
