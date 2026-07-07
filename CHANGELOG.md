@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-07-07
+
 ### Added
 - `MATTERMOST_EXTRA_CA_CERTS` — path to a PEM file with additional CA
   certificates (corporate/private CAs). Unlike `SSL_CERT_FILE` /
