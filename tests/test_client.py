@@ -124,6 +124,33 @@ class TestMattermostClientLifespan:
             assert client._client.headers["Authorization"] == "Bearer test-token-12345"
 
     @pytest.mark.asyncio
+    async def test_lifespan_sets_session_cookie_without_bearer_header(self, monkeypatch):
+        monkeypatch.setenv("MATTERMOST_URL", "https://mattermost.example.com")
+        monkeypatch.setenv("MATTERMOST_AUTH_MODE", "cookie")
+        monkeypatch.setenv("MATTERMOST_TOKEN", "session-token")
+        settings = Settings()
+
+        client = MattermostClient(settings)
+        async with client.lifespan():
+            assert client._client.headers["Cookie"] == "MMAUTHTOKEN=session-token"
+            assert "Authorization" not in client._client.headers
+            assert "X-CSRF-Token" not in client._client.headers
+
+    @pytest.mark.asyncio
+    async def test_lifespan_sets_csrf_cookie_and_header(self, monkeypatch):
+        monkeypatch.setenv("MATTERMOST_URL", "https://mattermost.example.com")
+        monkeypatch.setenv("MATTERMOST_AUTH_MODE", "cookie")
+        monkeypatch.setenv("MATTERMOST_TOKEN", "session-token")
+        monkeypatch.setenv("MATTERMOST_COOKIE_CSRF", "csrf-token")
+        settings = Settings()
+
+        client = MattermostClient(settings)
+        async with client.lifespan():
+            assert client._client.headers["Cookie"] == "MMAUTHTOKEN=session-token; MMCSRF=csrf-token"
+            assert client._client.headers["X-CSRF-Token"] == "csrf-token"
+            assert "Authorization" not in client._client.headers
+
+    @pytest.mark.asyncio
     async def test_lifespan_warns_when_no_token(self, mock_settings_allow_http, caplog):
         """Entering lifespan without a token logs a warning."""
         from mcp_server_mattermost.config import get_settings

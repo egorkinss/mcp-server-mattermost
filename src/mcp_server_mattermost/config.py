@@ -15,6 +15,7 @@ class AuthMode(str, Enum):
     STATIC_TOKEN = "static_token"  # noqa: S105
     CLIENT_TOKEN = "client_token"  # noqa: S105
     OAUTH_PROXY = "oauth_proxy"
+    COOKIE = "cookie"
 
 
 class OAuthClientType(str, Enum):
@@ -38,8 +39,10 @@ class Settings(BaseSettings):
 
     Environment variables:
         MATTERMOST_URL: Mattermost server URL (required)
-        MATTERMOST_AUTH_MODE: static_token, client_token, or oauth_proxy
-        MATTERMOST_TOKEN: Bot/user access token (required for static_token)
+        MATTERMOST_AUTH_MODE: static_token, client_token, oauth_proxy, or cookie
+        MATTERMOST_TOKEN: Bot/user access token (required for static_token and cookie)
+        MATTERMOST_COOKIE_NAME: Session cookie name for cookie mode (default: MMAUTHTOKEN)
+        MATTERMOST_COOKIE_CSRF: MMCSRF token for cookie mode
         MATTERMOST_ALLOW_HTTP_CLIENT_TOKENS: Deprecated alias for MATTERMOST_AUTH_MODE=client_token
         MATTERMOST_OAUTH_CLIENT_ID: Mattermost OAuth App client ID for oauth_proxy
         MATTERMOST_OAUTH_CLIENT_TYPE: public or confidential for oauth_proxy
@@ -83,6 +86,8 @@ class Settings(BaseSettings):
     log_level: str = Field(default="INFO", description="Logging level")
     log_format: str = Field(default="json", description="Log format: 'json' or 'text'")
     api_version: str = Field(default="v4", description="Mattermost API version")
+    cookie_name: str = Field(default="MMAUTHTOKEN", description="Session cookie name for cookie auth")
+    cookie_csrf: str | None = Field(default=None, description="MMCSRF token value for cookie auth")
 
     oauth_client_id: str | None = Field(default=None, description="Mattermost OAuth App client ID")
     oauth_client_type: OAuthClientType = Field(
@@ -168,8 +173,10 @@ class Settings(BaseSettings):
                 msg = "MATTERMOST_ALLOW_HTTP_CLIENT_TOKENS conflicts with MATTERMOST_AUTH_MODE"
                 raise ValueError(msg)
 
-        if self.auth_mode is AuthMode.STATIC_TOKEN and not (self.token and self.token.strip()):
-            msg = "MATTERMOST_TOKEN is required when MATTERMOST_AUTH_MODE=static_token"
+        if self.auth_mode in (AuthMode.STATIC_TOKEN, AuthMode.COOKIE) and not (
+            self.token and self.token.strip()
+        ):
+            msg = f"MATTERMOST_TOKEN is required when MATTERMOST_AUTH_MODE={self.auth_mode.value}"
             raise ValueError(msg)
 
         if self.auth_mode is AuthMode.OAUTH_PROXY:

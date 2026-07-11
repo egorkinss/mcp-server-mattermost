@@ -221,6 +221,59 @@ class TestAuthModeSettings:
         ):
             Settings()
 
+    def test_cookie_mode_uses_mattermost_session_cookie_defaults(self) -> None:
+        from mcp_server_mattermost.config import AuthMode, Settings
+
+        with patch.dict(
+            os.environ,
+            {
+                "MATTERMOST_URL": "https://mattermost.example.com",
+                "MATTERMOST_AUTH_MODE": "cookie",
+                "MATTERMOST_TOKEN": "session-token",
+            },
+            clear=True,
+        ):
+            settings = Settings()
+
+        assert settings.auth_mode is AuthMode.COOKIE
+        assert settings.cookie_name == "MMAUTHTOKEN"
+        assert settings.cookie_csrf is None
+
+    def test_cookie_mode_requires_session_token(self) -> None:
+        from mcp_server_mattermost.config import Settings
+
+        with (
+            patch.dict(
+                os.environ,
+                {
+                    "MATTERMOST_URL": "https://mattermost.example.com",
+                    "MATTERMOST_AUTH_MODE": "cookie",
+                },
+                clear=True,
+            ),
+            pytest.raises(ValidationError, match="MATTERMOST_TOKEN is required when MATTERMOST_AUTH_MODE=cookie"),
+        ):
+            Settings()
+
+    def test_cookie_mode_loads_custom_cookie_name_and_csrf(self) -> None:
+        from mcp_server_mattermost.config import Settings
+
+        with patch.dict(
+            os.environ,
+            {
+                "MATTERMOST_URL": "https://mattermost.example.com",
+                "MATTERMOST_AUTH_MODE": "cookie",
+                "MATTERMOST_TOKEN": "session-token",
+                "MATTERMOST_COOKIE_NAME": "CUSTOM_SESSION",
+                "MATTERMOST_COOKIE_CSRF": "csrf-token",
+            },
+            clear=True,
+        ):
+            settings = Settings()
+
+        assert settings.cookie_name == "CUSTOM_SESSION"
+        assert settings.cookie_csrf == "csrf-token"
+
     def test_oauth_proxy_public_minimal_valid_settings(self) -> None:
         from mcp_server_mattermost.config import AuthMode, OAuthClientType, Settings
 

@@ -90,6 +90,28 @@ class TestMcpAuth:
             assert instance.auth is None
             get_settings.cache_clear()
 
+    def test_create_mcp_cookie_auth_does_not_protect_stdio_transport(self, clean_env: None) -> None:
+        """Cookie mode authenticates Mattermost requests, not the local stdio MCP transport."""
+        import os
+        from unittest.mock import patch
+
+        with patch.dict(
+            os.environ,
+            {
+                "MATTERMOST_URL": "https://mattermost.example.com",
+                "MATTERMOST_TOKEN": "session-token",
+                "MATTERMOST_AUTH_MODE": "cookie",
+            },
+        ):
+            from mcp_server_mattermost.config import get_settings
+
+            get_settings.cache_clear()
+            from mcp_server_mattermost.server import _create_mcp
+
+            instance = _create_mcp()
+            assert instance.auth is None
+            get_settings.cache_clear()
+
     def test_create_mcp_client_token_auth(self, clean_env: None) -> None:
         """client_token mode attaches MattermostTokenVerifier."""
         import os

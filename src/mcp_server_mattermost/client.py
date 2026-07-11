@@ -12,7 +12,7 @@ from typing import Any, TypeVar
 import httpx
 from tenacity import RetryCallState, retry, retry_if_exception, stop_after_attempt, wait_exponential
 
-from .config import Settings
+from .config import AuthMode, Settings
 from .constants import UPDATE_BOOKMARK_RESPONSE_KEY
 from .exceptions import AuthenticationError, MattermostAPIError, NotFoundError, RateLimitError
 from .logging import logger, request_id_var
@@ -108,8 +108,16 @@ class MattermostClient:
         effective_token = raw.strip()
         headers: dict[str, str] = {"Content-Type": "application/json"}
         if effective_token:
-            headers["Authorization"] = f"Bearer {effective_token}"
-            logger.info("Initializing Mattermost API client")
+            if self.settings.auth_mode is AuthMode.COOKIE:
+                cookie_value = f"{self.settings.cookie_name}={effective_token}"
+                if self.settings.cookie_csrf:
+                    cookie_value += f"; MMCSRF={self.settings.cookie_csrf}"
+                    headers["X-CSRF-Token"] = self.settings.cookie_csrf
+                headers["Cookie"] = cookie_value
+                logger.info("Initializing Mattermost API client with cookie auth")
+            else:
+                headers["Authorization"] = f"Bearer {effective_token}"
+                logger.info("Initializing Mattermost API client")
         else:
             logger.warning("Initializing Mattermost API client without authentication token")
         async with httpx.AsyncClient(

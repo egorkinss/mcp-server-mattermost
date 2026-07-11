@@ -20,6 +20,8 @@ def build_auth_provider(settings: Settings) -> AuthProvider | None:
     match settings.auth_mode:
         case AuthMode.STATIC_TOKEN:
             return None
+        case AuthMode.COOKIE:
+            return None
         case AuthMode.CLIENT_TOKEN:
             return MattermostTokenVerifier()
         case AuthMode.OAUTH_PROXY:
