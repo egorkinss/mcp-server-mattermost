@@ -15,90 +15,63 @@ ROOT_ID = "root1234567890123456789012"
 FILE_ID = "file1234567890123456789012"
 
 
-class TestGetDrafts:
-    async def test_uses_current_user_and_returns_models(self) -> None:
-        client = AsyncMock()
-        client.get_me.return_value = {"id": USER_ID}
-        client.get_drafts.return_value = [{
-            "create_at": 1_700_000_000_000,
-            "update_at": 1_700_000_000_001,
-            "delete_at": 0,
-            "user_id": USER_ID,
-            "channel_id": CHANNEL_ID,
-            "root_id": "",
-            "message": "Draft text",
-            "type": "",
-            "props": {},
-            "file_ids": [],
-            "metadata": None,
-            "priority": {},
-        }]
-        result = await drafts.get_drafts(team_id=TEAM_ID, client=client)
-        client.get_drafts.assert_awaited_once_with(user_id=USER_ID, team_id=TEAM_ID)
-        assert result == [Draft(
-            create_at=1_700_000_000_000,
-            update_at=1_700_000_000_001,
-            delete_at=0,
-            user_id=USER_ID,
-            channel_id=CHANNEL_ID,
-            root_id="",
-            message="Draft text",
-            type="",
-            props={},
-            file_ids=[],
-            metadata=None,
-            priority={},
-        )]
+def make_draft_data(**overrides: object) -> dict[str, object]:
+    data: dict[str, object] = {
+        "create_at": 1_700_000_000_000,
+        "update_at": 1_700_000_000_001,
+        "delete_at": 0,
+        "user_id": USER_ID,
+        "channel_id": CHANNEL_ID,
+        "root_id": "",
+        "message": "Draft text",
+        "type": "",
+        "props": {},
+        "file_ids": [],
+        "metadata": None,
+        "priority": {},
+    }
+    data.update(overrides)
+    return data
 
 
-class TestUpsertDraft:
-    async def test_builds_payload_for_current_user(self) -> None:
-        client = AsyncMock()
-        client.get_me.return_value = {"id": USER_ID}
-        client.upsert_draft.return_value = {
-            "create_at": 1_700_000_000_000,
-            "update_at": 1_700_000_000_001,
-            "delete_at": 0,
-            "user_id": USER_ID,
-            "channel_id": CHANNEL_ID,
-            "root_id": ROOT_ID,
-            "message": "\u041f\u0440\u0438\u0432\u0435\u0442, \u044d\u0442\u043e draft!",
-            "type": "",
-            "props": {"draft": True},
-            "file_ids": [FILE_ID],
-            "metadata": None,
-            "priority": {"priority": "important"},
-        }
-        result = await drafts.upsert_draft(
-            channel_id=CHANNEL_ID,
-            message="\u041f\u0440\u0438\u0432\u0435\u0442, \u044d\u0442\u043e draft!",
-            root_id=ROOT_ID,
-            file_ids=[FILE_ID],
-            props={"draft": True},
-            priority={"priority": "important"},
-            client=client,
-        )
-        client.upsert_draft.assert_awaited_once_with(
-            user_id=USER_ID,
-            channel_id=CHANNEL_ID,
-            message="\u041f\u0440\u0438\u0432\u0435\u0442, \u044d\u0442\u043e draft!",
-            root_id=ROOT_ID,
-            file_ids=[FILE_ID],
-            props={"draft": True},
-            priority={"priority": "important"},
-        )
-        assert result.message == "\u041f\u0440\u0438\u0432\u0435\u0442, \u044d\u0442\u043e draft!"
+@pytest.mark.asyncio
+async def test_get_drafts_uses_current_user_and_returns_models() -> None:
+    client = AsyncMock()
+    client.get_me.return_value = {"id": USER_ID}
+    client.get_drafts.return_value = [make_draft_data()]
+    result = await drafts.get_drafts(team_id=TEAM_ID, client=client)
+    client.get_drafts.assert_awaited_once_with(user_id=USER_ID, team_id=TEAM_ID)
+    assert result == [Draft(**make_draft_data())]
 
 
-class TestDeleteDraft:
-    async def test_uses_current_user_and_optional_root(self) -> None:
-        client = AsyncMock()
-        client.get_me.return_value = {"id": USER_ID}
-        client.delete_draft.return_value = {"status": "OK"}
-        result = await drafts.delete_draft(channel_id=CHANNEL_ID, root_id=ROOT_ID, client=client)
-        client.delete_draft.assert_awaited_once_with(
-            user_id=USER_ID,
-            channel_id=CHANNEL_ID,
-            root_id=ROOT_ID,
-        )
-        assert result == {"status": "OK"}
+@pytest.mark.asyncio
+async def test_upsert_draft_builds_payload_for_current_user() -> None:
+    client = AsyncMock()
+    client.get_me.return_value = {"id": USER_ID}
+    client.upsert_draft.return_value = make_draft_data(
+        message="Привет, это draft!", root_id=ROOT_ID, file_ids=[FILE_ID],
+        props={"draft": True}, priority={"priority": "important"},
+     )
+    result = await drafts.upsert_draft(
+        channel_id=CHANNEL_ID, message="Привет, это draft!", root_id=ROOT_ID,
+        file_ids=[FILE_ID], props={"draft": True},
+        priority={"priority": "important"}, client=client,
+    )
+    client.upsert_draft.assert_awaited_once_with(
+        user_id=USER_ID, channel_id=CHANNEL_ID, message="Привет, это draft!",
+        root_id=ROOT_ID, file_ids=[FILE_ID], props={"draft": True},
+        priority={"priority": "important"},
+    )
+    assert result.message == "Привет, это draft!"
+
+
+@pytest.mark.asyncio
+async def test_delete_draft_uses_current_user_and_optional_root() -> None:
+    client = AsyncMock()
+    client.get_me.return_value = {"id": USER_ID}
+    client.delete_draft.return_value = {"status": "OK"}
+    result = await drafts.delete_draft(channel_id=CHANNEL_ID, root_id=ROOT_ID, client=client)
+    client.delete_draft.assert_awaited_once_with(
+        user_id=USER_ID, channel_id=CHANNEL_ID, root_id=ROOT_ID,
+    )
+    assert result == {"status": "OK"}
