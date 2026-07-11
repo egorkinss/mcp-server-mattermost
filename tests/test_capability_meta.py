@@ -47,6 +47,10 @@ EXPECTED_CAPABILITIES: dict[str, Capability] = {
     "upload_file": Capability.WRITE,
     "get_file_info": Capability.READ,
     "get_file_link": Capability.READ,
+    # drafts.py
+    "get_drafts": Capability.READ,
+    "upsert_draft": Capability.WRITE,
+    "delete_draft": Capability.DELETE,
     # bookmarks.py
     "list_bookmarks": Capability.READ,
     "create_bookmark": Capability.WRITE,
@@ -182,14 +186,14 @@ class TestCapabilityCounts:
 
     def test_expected_tool_count(self):
         """Total tool count matches expectations."""
-        assert len(EXPECTED_CAPABILITIES) == 38
+        assert len(EXPECTED_CAPABILITIES) == 41
 
     def test_capability_distribution(self):
         """Capability distribution matches design."""
         counts: dict[Capability, int] = {}
         for cap in EXPECTED_CAPABILITIES.values():
             counts[cap] = counts.get(cap, 0) + 1
-        assert counts[Capability.READ] == 20
-        assert counts[Capability.WRITE] == 14
+        assert counts[Capability.READ] == 21
+        assert counts[Capability.WRITE] == 15
         assert counts[Capability.CREATE] == 2
-        assert counts[Capability.DELETE] == 2
+        assert counts[Capability.DELETE] == 3

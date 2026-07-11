@@ -1,6 +1,7 @@
 """Async HTTP client for Mattermost API v4."""
 
 import asyncio
+import time
 from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
@@ -1151,6 +1152,53 @@ class MattermostClient:
             Object with 'link' field
         """
         result = await self.get(f"/files/{file_id}/link")
+        return result if isinstance(result, dict) else {}
+
+    # === Drafts API ===
+
+    async def get_drafts(self, user_id: str, team_id: str) -> list[dict[str, Any]]:
+        """Get all synced drafts for a user in a team."""
+        result = await self.get(f"/users/{user_id}/teams/{team_id}/drafts")
+        return result if isinstance(result, list) else []
+
+    async def upsert_draft(  # noqa: PLR0913
+        self,
+        user_id: str,
+        channel_id: str,
+        message: str,
+        root_id: str | None = None,
+        file_ids: list[str] | None = None,
+        props: dict[str, Any] | None = None,
+        priority: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Create or update a synced draft."""
+        timestamp = int(time.time() * 1000)
+        payload: dict[str, Any] = {
+            "create_at": timestamp,
+            "update_at": timestamp,
+            "user_id": user_id,
+            "channel_id": channel_id,
+            "root_id": root_id or "",
+            "message": message,
+            "type": "",
+            "props": props or {},
+            "file_ids": file_ids or [],
+            "priority": priority or {},
+        }
+        result = await self.post("/drafts", json=payload)
+        return result if isinstance(result, dict) else {}
+
+    async def delete_draft(
+        self,
+        user_id: str,
+        channel_id: str,
+        root_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Delete a channel draft or a thread draft."""
+        endpoint = f"/users/{user_id}/channels/{channel_id}/drafts"
+        if root_id:
+            endpoint = f"{endpoint}/{root_id}"
+        result = await self.delete(endpoint)
         return result if isinstance(result, dict) else {}
 
     # === Bookmarks API ===

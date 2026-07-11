@@ -37,6 +37,8 @@ for _tool in (
     "update_bookmark_sort_order",
 ):
     _TOOL_TO_MODULE[_tool] = "bookmarks"
+for _tool in ("get_drafts", "upsert_draft", "delete_draft"):
+    _TOOL_TO_MODULE[_tool] = "drafts"
 
 _MODULE_TO_TAG: dict[str, str] = {
     "bookmarks": "bookmark",
@@ -46,6 +48,7 @@ _MODULE_TO_TAG: dict[str, str] = {
     "users": "user",
     "teams": "team",
     "files": "file",
+    "drafts": "draft",
 }
 
 
@@ -83,7 +86,7 @@ class TestToolCount:
     """Verify expected number of tools are registered."""
 
     async def test_total_tool_count(self, all_tools):
-        assert len(all_tools) == 38, f"Expected 38 tools, got {len(all_tools)}: {list(all_tools.keys())}"
+        assert len(all_tools) == 41, f"Expected 41 tools, got {len(all_tools)}: {list(all_tools.keys())}"
 
     async def test_no_unexpected_tools(self, all_tools):
         """Catch new tools not in _TOOL_TO_MODULE."""

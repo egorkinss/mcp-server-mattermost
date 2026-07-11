@@ -18,6 +18,7 @@ class ToolTag(str, Enum):
     TEAM = "team"
     FILE = "file"
     BOOKMARK = "bookmark"
+    DRAFT = "draft"
     ENTRY_REQUIRED = "entry-required"  # Requires Entry, Professional, or Enterprise edition
 
 

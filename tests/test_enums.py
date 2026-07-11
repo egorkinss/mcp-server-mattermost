@@ -17,6 +17,7 @@ def test_tool_tags_values():
     assert ToolTag.TEAM.value == "team"
     assert ToolTag.FILE.value == "file"
     assert ToolTag.POST.value == "post"
+    assert ToolTag.DRAFT.value == "draft"
 
 
 def test_bookmark_tag_exists():

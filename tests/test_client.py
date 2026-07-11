@@ -2385,3 +2385,56 @@ class TestTokenOverride:
 
         # Check the Authorization header was set with the override token
         assert route.calls[0].request.headers["authorization"] == "Bearer my-override-token"
+
+
+class TestDraftsAPI:
+    """Tests for synced draft API methods."""
+
+    @pytest.mark.asyncio
+    @respx.mock
+    async def test_get_drafts(self, mock_settings):
+        from mcp_server_mattermost.config import get_settings
+        client = MattermostClient(get_settings())
+        route = respx.get("https://test.mattermost.com/api/v4/users/user123/teams/team123/drafts").mock(
+            return_value=httpx.Response(200, json=[{"message": "Draft"}]))
+        async with client.lifespan():
+            result = await client.get_drafts(user_id="user123", team_id="team123")
+        assert route.called
+        assert result == [{"message": "Draft"}]
+
+    @pytest.mark.asyncio
+    @respx.mock
+    async def test_upsert_draft(self, mock_settings, mocker):
+        import json
+
+        from mcp_server_mattermost.config import get_settings
+        client = MattermostClient(get_settings())
+        mocker.patch("mcp_server_mattermost.client.time.time", return_value=1_700_000_000.0)
+        route = respx.post("https://test.mattermost.com/api/v4/drafts").mock(
+            return_value=httpx.Response(201, json={"message": "Draft"}))
+        async with client.lifespan():
+            result = await client.upsert_draft(
+                user_id="user123", channel_id="channel123", message="Draft", root_id="root123",
+                file_ids=["file123"], props={"key": "value"}, priority={"priority": "important"})
+        payload = json.loads(route.calls[0].request.content)
+        assert payload == {
+            "create_at": 1_700_000_000_000, "update_at": 1_700_000_000_000,
+            "user_id": "user123", "channel_id": "channel123", "root_id": "root123",
+            "message": "Draft", "type": "", "props": {"key": "value"},
+            "file_ids": ["file123"], "priority": {"priority": "important"}}
+        assert result == {"message": "Draft"}
+
+    @pytest.mark.asyncio
+    @respx.mock
+    @pytest.mark.parametrize(("root_id", "endpoint"), [
+        (None, "/api/v4/users/user123/channels/channel123/drafts"),
+        ("root123", "/api/v4/users/user123/channels/channel123/drafts/root123")])
+    async def test_delete_draft(self, mock_settings, root_id, endpoint):
+        from mcp_server_mattermost.config import get_settings
+        client = MattermostClient(get_settings())
+        route = respx.delete(f"https://test.mattermost.com{endpoint}").mock(
+            return_value=httpx.Response(200, json={"status": "OK"}))
+        async with client.lifespan():
+            result = await client.delete_draft(user_id="user123", channel_id="channel123", root_id=root_id)
+        assert route.called
+        assert result == {"status": "OK"}
